@@ -108,28 +108,43 @@ int do_simple_command(struct node_s *node)
 		return (0);
 
 	int argc = 0;
-	long max_args = 255;
-	char *argv[max_args+1];     /* keep 1 for the terminating NULL arg */
+	int targc = 0;
+	char **argv = NULL;
 	char *str;
 
-	while(child)
+	while (child)
 	{
 		str = child->val.str;
-		argv[argc] = malloc(strlen(str)+1);
+		struct word_s *w = word_expand(str);
 
-		if (!argv[argc])
+		if (!w)
 		{
-			free_argv(argc, argv);
-			return (0);
+			child = child->next_sibling;
+			continue;
 		}
-		strcpy(argv[argc], str);
 
-		if (++argc >= max_args)
-			break;
+		struct word_s *w2 = w;
+		while (w2)
+		{
+			if (check_buffer_bounds(&argc, &targc, &argv))
+			{
+				str = malloc(strlen(w2->data)+1);
+				if(str)
+				{
+					strcpy(str, w2->data);
+					argv[argc++] = str;
+				}
+			}
+			w2 = w2->next;
+		}
+
+		free_all_words(w);
 
 		child = child->next_sibling;
 	}
-	argv[argc] = NULL;
+
+	if(check_buffer_bounds(&argc, &targc, &argv))
+		argv[argc] = NULL;
 
 	int i = 0;
 
