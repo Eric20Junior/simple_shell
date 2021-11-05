@@ -11,7 +11,7 @@ int   tok_bufsize  = 0;
 int   tok_bufindex = -1;
 
 /* special token to indicate end of input */
-struct token_s eof_token = 
+struct token_s eof_token =
 {
     .text_len = 0,
 };
@@ -40,7 +40,7 @@ void add_to_buf(char c)
 struct token_s *create_token(char *str)
 {
     struct token_s *tok = malloc(sizeof(struct token_s));
-    
+
     if(!tok)
     {
         return NULL;
@@ -48,18 +48,18 @@ struct token_s *create_token(char *str)
 
     memset(tok, 0, sizeof(struct token_s));
     tok->text_len = strlen(str);
-    
+
     char *nstr = malloc(tok->text_len+1);
-    
+
     if(!nstr)
     {
         free(tok);
         return NULL;
     }
-    
+
     strcpy(nstr, str);
     tok->text = nstr;
-    
+
     return tok;
 }
 
@@ -83,7 +83,7 @@ struct token_s *tokenize(struct source_s *src)
         errno = ENODATA;
         return &eof_token;
     }
-    
+
     if(!tok_buf)
     {
         tok_bufsize = 1024;
@@ -109,15 +109,72 @@ struct token_s *tokenize(struct source_s *src)
     {
         switch(nc)
         {
-            case ' ':
-            case '\t':
+	case  '"':
+	case '\'':
+	case  '`':
+                add_to_buf(nc);
+                i = find_closing_quote(src->buffer+src->curpos);
+                if(!i)
+                {
+			src->curpos = src->bufsize;
+			fprintf(stderr, "error: missing closing quote '%c'\n", nc);
+			return &eof_token;
+                }
+                while(i--)
+                {
+			add_to_buf(next_char(src));
+                }
+                break;
+
+	case '\\':
+                nc2 = next_char(src);
+                if(nc2 == '\n')
+                {
+			break;
+                }
+
+                add_to_buf(nc);
+
+                if(nc2 > 0)
+                {
+                    add_to_buf(nc2);
+                }
+                break;
+
+	case '$':
+                add_to_buf(nc);
+                nc = peek_char(src);
+
+                if(nc == '{' || nc == '(')
+                {
+                    i = find_closing_brace(src->buffer+src->curpos+1);
+                    if(!i)
+                    {
+                        src->curpos = src->bufsize;
+                        fprintf(stderr, "error: missing closing brace '%c'\n", nc);
+                        return &eof_token;
+                    }
+
+                    while(i--)
+                    {
+                        add_to_buf(next_char(src));
+                    }
+                }
+                else if(isalnum(nc) || nc == '*' || nc == '@' || nc == '#' ||
+                                       nc == '!' || nc == '?' || nc == '$')
+                {
+                    add_to_buf(next_char(src));
+                }
+                break;
+	case ' ':
+	case '\t':
                 if(tok_bufindex > 0)
                 {
                     endloop = 1;
                 }
                 break;
-                
-            case '\n':
+
+	case '\n':
                 if(tok_bufindex > 0)
                 {
                     unget_char(src);
@@ -128,8 +185,8 @@ struct token_s *tokenize(struct source_s *src)
                 }
                 endloop = 1;
                 break;
-                
-            default:
+
+          default:
                 add_to_buf(nc);
                 break;
         }
@@ -145,7 +202,7 @@ struct token_s *tokenize(struct source_s *src)
     {
         return &eof_token;
     }
-    
+
     if(tok_bufindex >= tok_bufsize)
     {
         tok_bufindex--;
